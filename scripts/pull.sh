@@ -95,5 +95,5 @@ done
 
 info ""
 info "pulled $pulled workflow(s) from '$INSTANCE'${ONLY:+ (filtered by --only $ONLY)}"
-[[ "$skipped" -eq 0 ]] || info "skipped $skipped not matching${PREFIX:+ --prefix '$PREFIX'}${ONLY:+ --only '$ONLY'}"
+[[ "$skipped" -eq 0 ]] || info "skipped $skipped not matching${PREFIX:+ --prefix $PREFIX}${ONLY:+ --only $ONLY}"
 info "review with: git diff workflows/"
