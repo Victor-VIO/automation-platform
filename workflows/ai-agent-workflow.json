@@ -1,0 +1,223 @@
+{
+  "connections": {
+    "AI Summary Agent": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Output (News summary)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Get Tech News": {
+      "ai_tool": [
+        [
+          {
+            "index": 0,
+            "node": "AI Summary Agent",
+            "type": "ai_tool"
+          }
+        ]
+      ]
+    },
+    "Get World News": {
+      "ai_tool": [
+        [
+          {
+            "index": 0,
+            "node": "AI Summary Agent",
+            "type": "ai_tool"
+          }
+        ]
+      ]
+    },
+    "OpenAI Model": {
+      "ai_languageModel": [
+        [
+          {
+            "index": 0,
+            "node": "AI Summary Agent",
+            "type": "ai_languageModel"
+          }
+        ]
+      ]
+    },
+    "Workflow trigger": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "AI Summary Agent",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "AI Agent workflow",
+  "nodes": [
+    {
+      "id": "b983b207-1c18-44d5-b9b0-70a2cbb107cf",
+      "name": "Sticky Note2",
+      "parameters": {
+        "color": 4,
+        "content": "✅ This demo workflow is ready to use\n✨ We gave you free OpenAI credits to play with",
+        "height": 256,
+        "width": 400
+      },
+      "position": [
+        -50,
+        -50
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "d9577afa-051b-4e5b-8b06-0d3a8103a7e2",
+      "name": "Send summary with Gmail",
+      "notes": "Double-click to open",
+      "notesInFlow": true,
+      "parameters": {
+        "emailType": "text",
+        "message": "={{ $json.output }}",
+        "operation": "send",
+        "options": {},
+        "resource": "message",
+        "sendTo": "<__PLACEHOLDER_VALUE__Recipient email address__>",
+        "subject": "Your news daily summary"
+      },
+      "position": [
+        0,
+        0
+      ],
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "webhookId": "77ee4ca2-65fa-4cc6-9306-ce7ba3893dda"
+    },
+    {
+      "id": "b70bb76f-a2a4-45e3-a566-65fbb94067cf",
+      "name": "Sticky Note",
+      "parameters": {
+        "color": 7,
+        "content": "### ✨ Bonus step \nSend the news summary via email. Open the node and connect your Gmail account [(= new credential)](https://www.youtube.com/shorts/2K6ltfI4YRg)",
+        "height": 96,
+        "width": 384
+      },
+      "position": [
+        352,
+        608
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "1c91c36d-abbb-4a48-8041-4c8b37a15d34",
+      "name": "Workflow trigger",
+      "parameters": {},
+      "position": [
+        0,
+        336
+      ],
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1
+    },
+    {
+      "id": "278a9e04-5b38-4011-9174-405d4eb1e0e7",
+      "name": "AI Summary Agent",
+      "notes": "Double-click to open",
+      "notesInFlow": true,
+      "parameters": {
+        "options": {
+          "systemMessage": "You are a helpful news assistant that summarizes world and tech news into concise, well-structured bullet points."
+        },
+        "promptType": "define",
+        "text": "=Provide a summary of world and tech news from the last 24 hours. \n\n- Use the headings \"World News\" and \"Tech News.\" \n- Exclude comments, insights, and any news that is considered sad or distressing. \n- Include up to 10 concise bullet points, prioritizing major events and developments. \n- Focus on key developments from credible sources.\n- Consider today to be {{ $today }}. \n"
+      },
+      "position": [
+        288,
+        336
+      ],
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "8e47ddf8-a8de-4634-a3a7-1dc6825ea704",
+      "name": "OpenAI Model",
+      "notes": "Free n8n credits ",
+      "notesInFlow": true,
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "options": {}
+      },
+      "position": [
+        224,
+        560
+      ],
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2
+    },
+    {
+      "id": "dfde4cf5-6df4-4959-803f-de558d8e5006",
+      "name": "Get Tech News",
+      "parameters": {
+        "options": {},
+        "url": "https://www.theverge.com/rss/index.xml"
+      },
+      "position": [
+        352,
+        560
+      ],
+      "type": "n8n-nodes-base.rssFeedReadTool",
+      "typeVersion": 1.2
+    },
+    {
+      "id": "d003f104-ed16-4a15-9fca-389cf75d5d55",
+      "name": "Get World News",
+      "parameters": {
+        "options": {},
+        "toolDescription": "Reads the news",
+        "url": "=https://feeds.bbci.co.uk/news/world/rss.xml"
+      },
+      "position": [
+        480,
+        560
+      ],
+      "type": "n8n-nodes-base.rssFeedReadTool",
+      "typeVersion": 1.2
+    },
+    {
+      "id": "10e4c0cf-91e7-4503-ab5c-5195c9ac7174",
+      "name": "Output (News summary)",
+      "notes": "Double-click to open",
+      "notesInFlow": true,
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "85b5c530-2c13-4424-ab83-05979bc879a5",
+              "name": "output",
+              "type": "string",
+              "value": "={{ $json.output }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "position": [
+        688,
+        336
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4
+    }
+  ],
+  "settings": {
+    "availableInMCP": true
+  }
+}

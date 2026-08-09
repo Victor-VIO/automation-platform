@@ -1,0 +1,57 @@
+{
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Set Hello",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "MCP Connection Test (safe to delete)",
+  "nodes": [
+    {
+      "id": "c5e40ecb-7c18-4e97-b5f8-c95aeadbd8ea",
+      "name": "Start",
+      "parameters": {},
+      "position": [
+        0,
+        0
+      ],
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1
+    },
+    {
+      "id": "77afd547-3f49-4ef3-a3f5-211f7f73e74c",
+      "name": "Set Hello",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "message",
+              "type": "string",
+              "value": "MCP connection test OK"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "mode": "manual"
+      },
+      "position": [
+        224,
+        0
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4
+    }
+  ],
+  "settings": {
+    "availableInMCP": true,
+    "executionOrder": "v1"
+  }
+}

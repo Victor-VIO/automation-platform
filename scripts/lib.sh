@@ -90,14 +90,24 @@ normalise_workflow() {
   } | del(.pinData)'
 }
 
+# Create the index if absent, and repair it if it is not valid JSON.
+# A corrupt index must not take down a pull — it is a cache, not the source
+# of truth, and it is cheaply rebuilt by pulling again.
+ensure_index() {
+  if [[ ! -f "$INDEX_FILE" ]] || ! jq empty "$INDEX_FILE" 2>/dev/null; then
+    [[ ! -f "$INDEX_FILE" ]] || warn "index was not valid JSON — resetting $INDEX_FILE"
+    printf '{}\n' > "$INDEX_FILE"
+  fi
+}
+
 index_get() { # index_get <slug> <instance> -> id or empty
-  [[ -f "$INDEX_FILE" ]] || { printf ''; return 0; }
+  ensure_index
   jq -r --arg s "$1" --arg i "$2" '.[$s][$i] // ""' "$INDEX_FILE"
 }
 
 index_set() { # index_set <slug> <instance> <id> <workflow name>
   local slug="$1" inst="$2" id="$3" name="$4" tmp
-  [[ -f "$INDEX_FILE" ]] || printf '{}\n' > "$INDEX_FILE"
+  ensure_index
   tmp="$(mktemp)"
   jq -S --arg s "$slug" --arg i "$inst" --arg id "$id" --arg n "$name" \
     '.[$s] = ((.[$s] // {}) | .[$i] = $id | .name = $n)' \
