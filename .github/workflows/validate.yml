@@ -1,0 +1,46 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  workflows:
+    name: workflow JSON + secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      # Same script that runs locally, so a local pass means a CI pass.
+      - name: Validate workflows
+        run: ./scripts/validate.sh
+
+  shell:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Lint scripts
+        run: shellcheck scripts/*.sh
+
+  secrets:
+    name: no committed .env
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # .gitignore can be bypassed with `git add -f`. This catches that.
+      - name: Assert .env is not tracked
+        run: |
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "::error::.env is tracked by git. Remove it from the index and rotate every key it held."
+            exit 1
+          fi
+          echo "ok: .env is not tracked"

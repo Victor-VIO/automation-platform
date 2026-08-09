@@ -1,0 +1,7 @@
+# Shell scripts must stay LF even when touched from Windows tooling.
+# A CRLF shebang line fails with "bad interpreter: /usr/bin/env bash^M".
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md text eol=lf

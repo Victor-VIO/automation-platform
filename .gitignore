@@ -1,0 +1,24 @@
+# secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# n8n exports that may carry secrets
+*credentials*.json
+!workflows/.index.json
+
+# tooling
+node_modules/
+__pycache__/
+.venv/
+venv/
+*.pyc
+.DS_Store
+*.swp
+
+# scratch
+tmp/
+*.tmp
+*.bak
