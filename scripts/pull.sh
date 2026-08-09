@@ -16,11 +16,17 @@ set -euo pipefail
 
 INSTANCE_ARG="cloud"
 ONLY=""
+# One n8n instance serves every build. Without a prefix filter each build repo
+# pulls every other build's workflows. Falls back to PULL_PREFIX from .env
+# AFTER load_env runs - reading it here would be too early to see it.
+PREFIX=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --instance) INSTANCE_ARG="${2:?--instance needs a value}"; shift 2 ;;
     --only)     ONLY="${2:?--only needs a value}";             shift 2 ;;
+    --prefix)   PREFIX="${2:?--prefix needs a value}";         shift 2 ;;
+    --all)      PREFIX="";                                     shift   ;;
     -h|--help)  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)          die "unknown argument: $1" ;;
   esac
@@ -28,6 +34,9 @@ done
 
 require_deps jq curl
 load_env
+# An explicit --prefix wins; otherwise fall back to .env, which is only
+# readable now that load_env has run.
+[[ -n "$PREFIX" ]] || PREFIX="${PULL_PREFIX:-}"
 resolve_instance "$INSTANCE_ARG"
 mkdir -p "$WORKFLOW_DIR"
 [[ -f "$INDEX_FILE" ]] || printf '{}\n' > "$INDEX_FILE"
@@ -53,6 +62,11 @@ while :; do
     name="$(jq -r '.name' <<<"$wf")"
     id="$(jq -r '.id' <<<"$wf")"
     slug="$(slugify "$name")"
+
+    if [[ -n "$PREFIX" && "$slug" != "$(slugify "$PREFIX")"* ]]; then
+      skipped=$((skipped + 1))
+      continue
+    fi
 
     if [[ -n "$ONLY" && "$slug" != "$(slugify "$ONLY")" && "$name" != "$ONLY" ]]; then
       skipped=$((skipped + 1))
@@ -81,5 +95,5 @@ done
 
 info ""
 info "pulled $pulled workflow(s) from '$INSTANCE'${ONLY:+ (filtered by --only $ONLY)}"
-[[ "$skipped" -eq 0 ]] || info "skipped $skipped not matching --only"
+[[ "$skipped" -eq 0 ]] || info "skipped $skipped not matching${PREFIX:+ --prefix '$PREFIX'}${ONLY:+ --only '$ONLY'}"
 info "review with: git diff workflows/"
