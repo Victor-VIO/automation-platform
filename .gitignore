@@ -22,3 +22,8 @@ venv/
 tmp/
 *.tmp
 *.bak
+.commitmsg
+
+# ad-hoc scripts at repo root are scratch by convention.
+# Anything worth keeping belongs in scripts/ with a name and a purpose.
+/.*.sh
