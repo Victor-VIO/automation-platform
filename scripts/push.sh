@@ -44,7 +44,18 @@ if [[ "$INSTANCE" == "cloud" && "$DRY_RUN" -eq 0 ]]; then
   sleep 5
 fi
 
-info "pushing to '$INSTANCE' ($N8N_URL)${DRY_RUN:+ [dry run]}"
+# Do NOT use ${DRY_RUN:+...} here: "0" is a non-empty string, so that form
+# expands whenever the variable is set and would label every real push a
+# dry run. Test the value, not whether it is set.
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  DRY_LABEL=" [dry run]"
+  DRY_SUFFIX=" (dry run — nothing written)"
+else
+  DRY_LABEL=""
+  DRY_SUFFIX=""
+fi
+
+info "pushing to '$INSTANCE' ($N8N_URL)${DRY_LABEL}"
 
 created=0
 updated=0
@@ -121,7 +132,7 @@ done
 shopt -u nullglob
 
 info ""
-info "'$INSTANCE': $updated updated, $created created${DRY_RUN:+ (dry run — nothing written)}"
+info "'$INSTANCE': $updated updated, $created created${DRY_SUFFIX}"
 
 if [[ -n "$unbound_report" ]]; then
   warn "these nodes had credentials live but no matching node name in the repo;"
