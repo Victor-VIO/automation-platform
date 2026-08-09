@@ -85,8 +85,21 @@ if [ "$LOST" = "OldName" ]; then ok "renamed node reported as unbound: $LOST"; e
 
 echo
 echo "############ TEST 9: instance guard ############"
-OUT=$(./scripts/pull.sh --instance bogus 2>&1); echo "$OUT" | grep -q "unknown instance" && ok "rejects unknown instance" || bad "bad instance not caught"
-OUT=$(env -u N8N_CLOUD_URL ./scripts/pull.sh --instance selfhosted 2>&1); echo "$OUT" | grep -q "URL not set" && ok "unset instance fails loudly" || bad "unset instance not caught: $OUT"
+# Written as if/then/else rather than `A && B || C`: in that form C also runs
+# when A succeeds but B fails, so a broken assertion could report pass AND fail.
+OUT=$(./scripts/pull.sh --instance bogus 2>&1)
+if echo "$OUT" | grep -q "unknown instance"; then
+  ok "rejects unknown instance"
+else
+  bad "bad instance not caught: $OUT"
+fi
+
+OUT=$(env -u N8N_CLOUD_URL ./scripts/pull.sh --instance selfhosted 2>&1)
+if echo "$OUT" | grep -q "URL not set"; then
+  ok "unset instance fails loudly"
+else
+  bad "unset instance not caught: $OUT"
+fi
 
 rm -f workflows/sample-clean.json
 echo
