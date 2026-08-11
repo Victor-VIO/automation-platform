@@ -56,7 +56,13 @@ instance-specific. Put it in `.env`:
 ```bash
 N8N_CLOUD_URL=https://your-instance.app.n8n.cloud
 N8N_CLOUD_API_KEY=n8n_api_...
+PULL_PREFIX=ap-          # this repo only pulls workflows named "AP — ..."
 ```
+
+`PULL_PREFIX` is why a fresh pull may report `0 workflows` and exit `3`: one n8n
+instance serves every build in the portfolio, and this repo owns only the `ap-`
+ones. Name workflows `AP — <Name>` when you create them — see
+[ADR 0002](docs/adr/0002-workflow-naming.md).
 
 Then:
 
@@ -76,13 +82,27 @@ git add -A && git commit -m "pull workflows"
 | `push.sh` | repo → n8n | Restore-from-git, bulk deploy, cross-instance promotion |
 | `validate.sh` | — | Before every commit. CI runs the identical script |
 
-All accept `--instance cloud\|selfhosted` and `--only <slug>`. `push.sh` also takes
+Both accept `--instance cloud|selfhosted` and `--only <slug>`.
+
+`pull.sh` is **scoped by prefix**. One n8n instance serves every build in the
+portfolio, so each repo pulls only the workflows it owns — this one takes the
+`ap-` prefix from `PULL_PREFIX` in `.env`. Override with `--prefix <p>` for a
+different scope or `--all` for no scope; either flag on the command line beats
+the `.env` default. A pull that matches **zero** workflows exits `3` and names
+the prefix it used, rather than reporting success having written nothing. See
+[ADR 0002](docs/adr/0002-workflow-naming.md) for the naming convention.
+
+`push.sh` **requires an explicit scope** — `--only <slug>` or `--all`. A bare
+invocation is a usage error and writes nothing. The default instance is `cloud`,
+which is production, and the scope used to default to every file in
+`workflows/`, which made the shortest command the widest one. It also takes
 `--dry-run`, which reports what it would do and writes nothing.
 
 ```bash
 ./scripts/pull.sh --instance cloud
 ./scripts/pull.sh --instance cloud --only dispatch-desk-intake
-./scripts/push.sh --instance selfhosted --dry-run
+./scripts/pull.sh --instance cloud --all              # ignore PULL_PREFIX
+./scripts/push.sh --instance selfhosted --all --dry-run
 ./scripts/push.sh --instance selfhosted --only dispatch-desk-intake
 ```
 

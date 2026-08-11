@@ -187,6 +187,32 @@ if echo "$OUT" | grep -q "matched 0 workflows"; then ok "zero-match says so expl
 if echo "$OUT" | grep -q "zz-"; then ok "zero-match names the configured prefix"; else bad "zero-match must name the prefix: $OUT"; fi
 if echo "$OUT" | grep -q "ap-intake"; then ok "zero-match lists what it skipped"; else bad "zero-match must list skipped slugs: $OUT"; fi
 
+echo
+echo "############ TEST 14: push.sh requires an explicit scope ############"
+# A bare push targeted every file in workflows/ against a default instance of
+# cloud, which is production. It must now refuse and write nothing.
+OUT=$(./scripts/push.sh --instance cloud 2>&1); RC=$?
+if [ "$RC" -ne 0 ]; then ok "bare push exits non-zero ($RC)"; else bad "bare push must not exit 0"; fi
+if echo "$OUT" | grep -q "no scope given"; then ok "bare push explains the missing scope"; else bad "expected 'no scope given': $OUT"; fi
+if echo "$OUT" | grep -q "\-\-only"; then ok "bare push prints usage"; else bad "bare push must print usage: $OUT"; fi
+if echo "$OUT" | grep -q "pushing to"; then bad "bare push started work before failing"; else ok "bare push wrote nothing"; fi
+
+OUT=$(./scripts/push.sh --instance cloud --only x --all 2>&1); RC=$?
+if [ "$RC" -ne 0 ] && echo "$OUT" | grep -q "contradictory"; then
+  ok "--only with --all is rejected"
+else
+  bad "--only + --all must be rejected, got rc=$RC: $OUT"
+fi
+
+OUT=$(./scripts/push.sh --instance cloud --all --dry-run 2>&1)
+if echo "$OUT" | grep -q "no scope given"; then bad "--all should satisfy the scope check"; else ok "--all satisfies the scope check"; fi
+
+# The instance guards must still report before the scope check, unchanged.
+OUT=$(./scripts/push.sh --instance selfhosted 2>&1)
+if echo "$OUT" | grep -q "URL not set"; then ok "instance guard still precedes the scope check"; else bad "instance guard regressed: $OUT"; fi
+OUT=$(./scripts/push.sh --instance bogus 2>&1)
+if echo "$OUT" | grep -q "unknown instance"; then ok "push.sh still rejects an unknown instance"; else bad "unknown-instance guard regressed: $OUT"; fi
+
 rm -rf "$STUB"
 
 rm -f workflows/sample-clean.json

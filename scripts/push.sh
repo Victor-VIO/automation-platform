@@ -2,7 +2,12 @@
 #
 # push.sh — repo → n8n.
 #
-#   ./scripts/push.sh [--instance cloud|selfhosted] [--only <slug>] [--dry-run]
+#   ./scripts/push.sh --instance <cloud|selfhosted> (--only <slug> | --all) [--dry-run]
+#
+# Scope is REQUIRED. --only <slug> pushes one workflow; --all pushes every file
+# in workflows/. A bare invocation is a usage error and writes nothing: the
+# default instance is cloud, which is production, and the scope used to default
+# to everything — so the shortest command was also the widest one.
 #
 # NOT an editing path. Use n8n_update_partial_workflow (MCP) for daily authoring.
 # This exists for restore-from-git, bulk deploy, and cross-instance promotion.
@@ -21,14 +26,18 @@ set -euo pipefail
 
 INSTANCE_ARG="cloud"
 ONLY=""
+ALL=0
 DRY_RUN=0
+
+usage() { sed -n '3,22p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --instance) INSTANCE_ARG="${2:?--instance needs a value}"; shift 2 ;;
     --only)     ONLY="${2:?--only needs a value}";             shift 2 ;;
+    --all)      ALL=1;                                         shift   ;;
     --dry-run)  DRY_RUN=1;                                     shift   ;;
-    -h|--help)  sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)  usage; exit 0 ;;
     *)          die "unknown argument: $1" ;;
   esac
 done
@@ -36,6 +45,21 @@ done
 require_deps jq curl
 load_env
 resolve_instance "$INSTANCE_ARG"
+
+# Scope check sits after resolve_instance so the instance guards keep reporting
+# first — a bad or unconfigured --instance is still the error you get told about.
+if [[ -n "$ONLY" && "$ALL" -eq 1 ]]; then
+  usage >&2
+  die "--only and --all are contradictory; pass one"
+fi
+
+# A bare push targeted every file in workflows/, against a default instance of
+# cloud, which is production. Requiring the scope makes the blast radius
+# something the caller typed rather than something they inherited.
+if [[ -z "$ONLY" && "$ALL" -eq 0 ]]; then
+  usage >&2
+  die "no scope given: pass --only <slug> for one workflow, or --all for every file in workflows/"
+fi
 
 [[ -d "$WORKFLOW_DIR" ]] || die "no workflows/ directory — run pull.sh first"
 
