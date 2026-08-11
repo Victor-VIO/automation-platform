@@ -76,6 +76,23 @@ slugify() {
     | sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-\{1,\}//' -e 's/-\{1,\}$//'
 }
 
+# prefix_matches <slug> <prefix>
+# True when <prefix> is a whole leading dash-delimited segment of <slug>.
+#
+# slugify() strips trailing separators, so "ap-" and "ap" both normalise to
+# "ap". Globbing on "ap"* would therefore also match api-gateway and
+# apple-sorter — broader than intended, in the direction of pulling other
+# builds' workflows, which is what the prefix exists to prevent. Requiring the
+# "-" boundary makes a prefix a segment rather than a substring.
+#
+# An empty prefix matches everything; callers decide whether that is allowed.
+prefix_matches() {
+  local slug="$1" base
+  base="$(slugify "$2")"
+  [[ -n "$base" ]] || return 0
+  [[ "$slug" == "$base" || "$slug" == "$base-"* ]]
+}
+
 # Normalise a workflow into the committed shape:
 #   - only the four fields the n8n API accepts on write
 #   - credentials stripped from every node

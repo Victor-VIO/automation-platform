@@ -101,6 +101,94 @@ else
   bad "unset instance not caught: $OUT"
 fi
 
+echo
+echo "############ TEST 10: prefix matching is delimiter-aware ############"
+# The audit bug: slugify("ap-") returns "ap" (trailing separators are stripped),
+# so the old glob "$slug" == "ap"* also matched api-gateway and apple-sorter.
+# shellcheck source=scripts/lib.sh
+. ./scripts/lib.sh
+# lib.sh sets -e. This harness asserts on commands that fail on purpose, so it
+# must not inherit that — test 13 deliberately drives pull.sh to a non-zero exit.
+set +e
+if prefix_matches "ap-intake" "ap-";   then ok "'ap-' matches ap-intake"; else bad "'ap-' should match ap-intake"; fi
+if prefix_matches "api-gateway" "ap-"; then bad "'ap-' must NOT match api-gateway"; else ok "'ap-' rejects api-gateway"; fi
+if prefix_matches "apple-sorter" "ap-"; then bad "'ap-' must NOT match apple-sorter"; else ok "'ap-' rejects apple-sorter"; fi
+if prefix_matches "ap-intake" "ap";    then ok "bare 'ap' behaves as 'ap-'"; else bad "bare 'ap' should match ap-intake"; fi
+if prefix_matches "ap" "ap-";          then ok "prefix matches a slug equal to itself"; else bad "'ap-' should match slug 'ap'"; fi
+if prefix_matches "anything" "";       then ok "empty prefix matches everything"; else bad "empty prefix should match everything"; fi
+
+echo
+echo "############ TESTS 11-13: pull.sh scoping, against a stubbed API ############"
+# pull.sh is driven end-to-end here with curl stubbed on PATH, so these exercise
+# the real argument parsing and the real filter rather than a copy of them.
+# Still offline: no API key is used and nothing leaves the machine.
+STUB="$(mktemp -d)"
+mkdir -p "$STUB/bin"
+cat > "$STUB/bin/curl" <<'STUBEOF'
+#!/usr/bin/env bash
+# Test stub for curl. Serves canned n8n API responses from $STUB_DIR.
+url=""
+for a in "$@"; do case "$a" in http*) url="$a" ;; esac; done
+case "$url" in
+  *"/workflows?limit="*) cat "$STUB_DIR/list.json" ;;
+  */workflows/*)         cat "$STUB_DIR/wf-${url##*/}.json" ;;
+  *)                     printf '{}\n' ;;
+esac
+STUBEOF
+chmod +x "$STUB/bin/curl"
+
+cat > "$STUB/list.json" <<'STUBEOF'
+{"data":[
+ {"id":"id1","name":"AP — Intake"},
+ {"id":"id2","name":"Api Gateway"},
+ {"id":"id3","name":"Apple Sorter"}
+],"nextCursor":null}
+STUBEOF
+for i in 1 2 3; do
+  printf '{"id":"id%s","name":"N%s","nodes":[],"connections":{},"settings":{}}\n' "$i" "$i" > "$STUB/wf-id$i.json"
+done
+# The stub needs a URL and a key to get past resolve_instance. A real .env
+# overrides these when sourced, which is fine — curl is stubbed either way.
+# PULL_PREFIX is exported so the .env-default test is deterministic in CI,
+# which has no .env at all.
+export STUB_DIR="$STUB" PATH="$STUB/bin:$PATH"
+export N8N_CLOUD_URL="https://stub.invalid" N8N_CLOUD_API_KEY="stub-key" PULL_PREFIX="ap-"
+
+cp workflows/.index.json "$STUB/index.bak" 2>/dev/null || true
+stub_cleanup() {
+  rm -f workflows/ap-intake.json workflows/api-gateway.json workflows/apple-sorter.json
+  if [ -f "$STUB/index.bak" ]; then cp "$STUB/index.bak" workflows/.index.json; fi
+}
+
+echo "--- 11: an explicit --prefix pulls only whole-segment matches ---"
+OUT=$(./scripts/pull.sh --instance cloud --prefix ap- 2>&1); RC=$?
+stub_cleanup
+if [ "$RC" -eq 0 ] && echo "$OUT" | grep -q "pulled 1 workflow"; then
+  ok "--prefix ap- pulled exactly 1 of 3 (ap-intake)"
+else
+  bad "--prefix ap- should pull 1, got rc=$RC: $OUT"
+fi
+if echo "$OUT" | grep -q "skipped 2"; then ok "api-gateway and apple-sorter skipped"; else bad "expected 2 skipped: $OUT"; fi
+
+echo "--- 12: --all beats the PULL_PREFIX default from .env ---"
+OUT=$(./scripts/pull.sh --instance cloud --all 2>&1); RC=$?
+stub_cleanup
+if [ "$RC" -eq 0 ] && echo "$OUT" | grep -q "pulled 3 workflow"; then
+  ok "--all overrode PULL_PREFIX and pulled all 3"
+else
+  bad "--all should pull 3, got rc=$RC: $OUT"
+fi
+
+echo "--- 13: a pull matching zero workflows must NOT exit 0 ---"
+OUT=$(./scripts/pull.sh --instance cloud --prefix zz- 2>&1); RC=$?
+stub_cleanup
+if [ "$RC" -eq 3 ]; then ok "zero-match exits 3, not 0"; else bad "zero-match must exit 3, got rc=$RC"; fi
+if echo "$OUT" | grep -q "matched 0 workflows"; then ok "zero-match says so explicitly"; else bad "zero-match message missing: $OUT"; fi
+if echo "$OUT" | grep -q "zz-"; then ok "zero-match names the configured prefix"; else bad "zero-match must name the prefix: $OUT"; fi
+if echo "$OUT" | grep -q "ap-intake"; then ok "zero-match lists what it skipped"; else bad "zero-match must list skipped slugs: $OUT"; fi
+
+rm -rf "$STUB"
+
 rm -f workflows/sample-clean.json
 echo
 echo "=================================================="
