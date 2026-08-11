@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
 # Offline acceptance tests for Build 0a. No API key, no network.
+#
+# DEVIATION from the CLAUDE.md rule "shell scripts start with set -euo pipefail":
+# this one sets -uo pipefail but NOT -e. It is a test harness, and most of what
+# it asserts on are commands that fail on purpose — a rejected credential, an
+# unknown instance, a zero-match pull exiting 3, a scopeless push. Under -e the
+# first such assertion would abort the run and report a pass. Failures are
+# counted in $fail and the harness exits non-zero at the end instead.
+#
+# -u and pipefail still apply: an unset variable in an assertion is a bug in the
+# test, and a failure mid-pipeline must not be masked by a successful tail.
+set -uo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
 
