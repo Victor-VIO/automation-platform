@@ -19,6 +19,27 @@
 - Workflow JSON exported to /workflows, pretty-printed, sorted keys.
 - No secrets in workflow nodes. n8n credential store only.
 
+## Workflow naming
+- **Every workflow this repo creates is named `AP — <Descriptive Name>`.**
+  Apply the prefix when you create the workflow, not afterwards. One n8n Cloud
+  instance serves every build in the portfolio, and `pull.sh` only pulls
+  workflows whose slug begins with the `ap` segment (`PULL_PREFIX=ap-`). A
+  workflow created without the prefix is invisible to this repo forever — the
+  pull skips it and nothing reports an error.
+- `AP — Dispatch Desk Intake` slugifies to `ap-dispatch-desk-intake` and lands
+  at `workflows/ap-dispatch-desk-intake.json`. The separator is free: `AP - X`,
+  `AP — X` and `[AP] X` all slugify the same. What matters is that the slug's
+  first dash-delimited segment is exactly `ap`.
+- Renaming a workflow renames its file. Finish the job: pull, then `git rm` the
+  file under the old slug and delete that key from `workflows/.index.json`.
+  Leaving both behind means `push.sh` can overwrite the workflow with its own
+  stale copy.
+- Never rename across the prefix boundary. Dropping the `AP` prefix removes the
+  workflow from this repo's scope silently.
+- Inherited an unprefixed workflow? Rename it in n8n to add the prefix, then
+  pull — the ID is stable across a rename. If it belongs to another build,
+  leave it alone entirely. See `docs/adr/0002-workflow-naming.md`.
+
 ## Sync discipline
 - Any MCP write to n8n counts as an out-of-band edit. Run ./scripts/pull.sh
   and commit before touching that workflow's JSON locally.
