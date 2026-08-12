@@ -69,6 +69,23 @@ api() {
     "$N8N_URL/api/v1$path" "$@"
 }
 
+# api_status <METHOD> <path> -> prints the HTTP status code, always exits 0
+#
+# `api` fails the same way for 404, 401, and 500, which is not good enough when
+# the caller wants to treat "gone" differently from "cannot talk to the API".
+# Recovering from a missing workflow is correct; silently recovering from a bad
+# key would create duplicates on an instance we never really read.
+api_status() {
+  local method="$1" path="$2"
+  shift 2
+  curl -sS -o /dev/null -w '%{http_code}' \
+    -X "$method" \
+    -H "X-N8N-API-KEY: $N8N_API_KEY" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json" \
+    "$N8N_URL/api/v1$path" "$@" 2>/dev/null || true
+}
+
 # slugify <string> -> filesystem-safe lowercase slug
 slugify() {
   printf '%s' "$1" \

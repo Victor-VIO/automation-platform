@@ -99,20 +99,45 @@ for f in "$WORKFLOW_DIR"/*.json; do
   name="$(jq -r '.name' <<<"$local_json")"
   id="$(index_get "$slug" "$INSTANCE")"
 
+  # A stale index entry must not be fatal. The index is a cache, not the source
+  # of truth — lib.sh already treats a corrupt one as cheaply rebuilt. An id
+  # that is gone upstream is the same class of problem: the workflow was
+  # deleted, the instance was rebuilt, or the index was copied between repos.
+  #
+  # Dying here broke the one case this script exists for. Restore-from-git runs
+  # precisely when the workflows are missing upstream, and the index still names
+  # their old ids — so the update branch was taken, the GET 404'd, and `set -e`
+  # killed the push before the create branch could ever be reached.
+  live=""
+  if [[ -n "$id" ]]; then
+    if ! live="$(api GET "/workflows/$id" 2>/dev/null)"; then
+      # Only "gone" is recoverable. A 401 or a 500 means we never got a real
+      # answer about what is on the instance, and creating on that basis would
+      # duplicate workflows that are actually still there.
+      status="$(api_status GET "/workflows/$id")"
+      case "$status" in
+        404) warn "$slug: index names id $id on '$INSTANCE', but it is gone upstream (404)"
+             id=""; live="" ;;
+        *)   die "$slug: cannot read id $id from '$INSTANCE' (HTTP $status). Not a missing workflow — refusing to create a duplicate." ;;
+      esac
+    fi
+  fi
+
+  # No usable id — either the index had none, or the one it had was dead. Match
+  # by name before creating, so a workflow that came back under a new id gets
+  # updated rather than duplicated.
   if [[ -z "$id" ]]; then
-    # Not on this instance yet. Try to match an existing workflow by name
-    # before creating a duplicate.
     existing="$(api GET "/workflows?limit=250" \
       | jq -r --arg n "$name" '.data[] | select(.name == $n) | .id' | head -1)"
     if [[ -n "$existing" ]]; then
       id="$existing"
       info "matched '$name' to existing id $id on '$INSTANCE' by name"
+      live="$(api GET "/workflows/$id")"
     fi
   fi
 
   if [[ -n "$id" ]]; then
     # --- UPDATE: merge live credentials back in before writing ---
-    live="$(api GET "/workflows/$id")"
 
     payload="$(jq -n \
       --argjson local "$local_json" \
@@ -136,6 +161,10 @@ for f in "$WORKFLOW_DIR"/*.json; do
       info "would update  $slug  (id $id)"
     else
       api PUT "/workflows/$id" -d "$payload" >/dev/null
+      # Record the id actually used. When it came from the name-match fallback
+      # it differs from whatever the index held, and leaving the old value there
+      # means the next push repeats the same dead lookup.
+      index_set "$slug" "$INSTANCE" "$id" "$name"
       info "updated  $slug  (id $id)"
     fi
     updated=$((updated + 1))

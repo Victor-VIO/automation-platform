@@ -138,12 +138,36 @@ mkdir -p "$STUB/bin"
 cat > "$STUB/bin/curl" <<'STUBEOF'
 #!/usr/bin/env bash
 # Test stub for curl. Serves canned n8n API responses from $STUB_DIR.
-url=""
-for a in "$@"; do case "$a" in http*) url="$a" ;; esac; done
-case "$url" in
-  *"/workflows?limit="*) cat "$STUB_DIR/list.json" ;;
-  */workflows/*)         cat "$STUB_DIR/wf-${url##*/}.json" ;;
-  *)                     printf '{}\n' ;;
+#
+# A workflow id is "present" iff $STUB_DIR/wf-<id>.json exists. A missing file
+# is served as a 404 — that is what test 13 uses to simulate a stale index.
+# `--fail-with-body` makes real curl exit 22 on 4xx, so the stub does too.
+url=""; method="GET"; want_status=0; next_is_method=0
+for a in "$@"; do
+  if [ "$next_is_method" = 1 ]; then method="$a"; next_is_method=0; continue; fi
+  case "$a" in
+    http*)           url="$a" ;;
+    -X)              next_is_method=1 ;;
+    '%{http_code}')  want_status=1 ;;
+  esac
+done
+
+serve() { # serve <status> [file]
+  if [ "$want_status" = 1 ]; then printf '%s' "$1"; exit 0; fi
+  case "$1" in
+    2*) [ -n "${2:-}" ] && cat "$2"; exit 0 ;;
+    *)  exit 22 ;;
+  esac
+}
+
+case "$method:$url" in
+  POST:*/workflows)            serve 200 "$STUB_DIR/created.json" ;;
+  *:*"/workflows?limit="*)     serve 200 "$STUB_DIR/list.json" ;;
+  PUT:*/workflows/*)           serve 200 "$STUB_DIR/created.json" ;;
+  *:*/workflows/*)
+    id="${url##*/}"
+    if [ -f "$STUB_DIR/wf-$id.json" ]; then serve 200 "$STUB_DIR/wf-$id.json"; else serve 404; fi ;;
+  *)                           serve 200 /dev/null ;;
 esac
 STUBEOF
 chmod +x "$STUB/bin/curl"
@@ -223,6 +247,55 @@ OUT=$(./scripts/push.sh --instance selfhosted 2>&1)
 if echo "$OUT" | grep -q "URL not set"; then ok "instance guard still precedes the scope check"; else bad "instance guard regressed: $OUT"; fi
 OUT=$(./scripts/push.sh --instance bogus 2>&1)
 if echo "$OUT" | grep -q "unknown instance"; then ok "push.sh still rejects an unknown instance"; else bad "unknown-instance guard regressed: $OUT"; fi
+
+echo
+echo "############ TEST 13: a stale index id must CREATE, not abort ############"
+# The regression this guards. push.sh read the workflow id from .index.json and
+# went straight to the update branch. When that id was gone upstream the GET
+# 404'd and `set -e` killed the run — so restore-from-git, the exact case the
+# script exists for, was the one case it could not do. The name-match fallback
+# that would have created the workflow only ran when the index held NO id, so a
+# stale id never reached it.
+printf '{"connections":{},"name":"Stale Index Probe","nodes":[],"settings":{}}' \
+  > workflows/stale-index-probe.json
+
+# List deliberately does NOT contain "Stale Index Probe", so the name-match
+# fallback finds nothing and the create path is the only correct outcome.
+cat > "$STUB/list.json" <<'STUBEOF'
+{"data":[{"id":"id1","name":"AP — Intake"}],"nextCursor":null}
+STUBEOF
+printf '{"id":"fresh-id-1","name":"Stale Index Probe"}\n' > "$STUB/created.json"
+
+# The index names an id with no wf-*.json behind it: present locally, gone upstream.
+jq -n '{"stale-index-probe":{"cloud":"deadbeef-gone","name":"Stale Index Probe"}}' \
+  > workflows/.index.json
+
+OUT=$(./scripts/push.sh --instance cloud --only stale-index-probe 2>&1); RC=$?
+
+if [ "$RC" -eq 0 ]; then ok "stale id does not abort the push (rc=0)"; else bad "stale id still aborts: rc=$RC: $OUT"; fi
+if echo "$OUT" | grep -q "gone upstream"; then ok "stale id is reported, not swallowed"; else bad "expected a 'gone upstream' warning: $OUT"; fi
+if echo "$OUT" | grep -q "created  stale-index-probe"; then ok "fell through to the create path"; else bad "should have created: $OUT"; fi
+if echo "$OUT" | grep -q "1 created"; then ok "counted as created, not updated"; else bad "expected '1 created': $OUT"; fi
+NEWID=$(jq -r '."stale-index-probe".cloud' workflows/.index.json 2>/dev/null)
+if [ "$NEWID" = "fresh-id-1" ]; then ok "index rewritten with the fresh id"; else bad "index should hold fresh-id-1, holds '$NEWID'"; fi
+
+echo "--- 13b: a non-404 failure must NOT create a duplicate ---"
+# 401/500 means we never learned what is on the instance. Creating on that
+# basis would duplicate workflows that are still there.
+cat > "$STUB/bin/curl" <<'STUBEOF'
+#!/usr/bin/env bash
+for a in "$@"; do case "$a" in '%{http_code}') printf '401'; exit 0 ;; esac; done
+exit 22
+STUBEOF
+chmod +x "$STUB/bin/curl"
+OUT=$(./scripts/push.sh --instance cloud --only stale-index-probe 2>&1); RC=$?
+if [ "$RC" -ne 0 ]; then ok "auth failure aborts (rc=$RC)"; else bad "auth failure must not exit 0"; fi
+if echo "$OUT" | grep -q "HTTP 401"; then ok "auth failure names the status"; else bad "expected 'HTTP 401': $OUT"; fi
+if echo "$OUT" | grep -qi "refusing to create a duplicate"; then ok "refuses to create on an unreadable instance"; else bad "must refuse to create: $OUT"; fi
+if echo "$OUT" | grep -q "created  stale-index-probe"; then bad "created a duplicate on an unreadable instance"; else ok "nothing created"; fi
+
+rm -f workflows/stale-index-probe.json
+stub_cleanup
 
 rm -rf "$STUB"
 
